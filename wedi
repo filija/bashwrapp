@@ -1,0 +1,259 @@
+#!/bin/sh
+
+#Jmeno: Jakub Filipek
+#Login: xfilip34
+#Projekt: IOS, proj1...Wrapper (wedi.sh)
+
+actualDir="`realpath $PWD`"; ##globalni promena aktualniho adresare
+realDir="NULL"; ##globalni promena realne cesty k souboru
+
+toRealDirectory()
+{
+	realDir="`realpath $1`";
+}
+
+editFile()
+{
+	if [ -z $EDITOR ]
+	then
+		$VISUAL $1
+	else
+		$EDITOR $1
+	fi
+	
+	CESTA="`realpath $1`"
+	DATUM="`date +%Y-%m-%d`"
+	echo "$CESTA:$DATUM" >> $WEDI_RC
+	
+}
+
+removeDelim()
+{
+	OPEN="`echo $1 | cut -d : -f 1`";
+	editFile $OPEN;
+	
+}
+
+#################################ZACATEK FUNKCE listOfDate###########################################
+listOfDate()   
+{
+	YEAR="`echo $2 | cut -d - -f1`"  
+	MONTH="`echo $2 | cut -d - -f2`"
+	DAY="`echo $2 | cut -d - -f3`"
+		 
+		while read LINE
+		do
+			BUFFER="`echo $LINE | grep "$3/[^/]*$" | grep $3`"
+			YEARB="`echo $LINE | cut -d : -f2 | cut -d - -f1`"
+			MONTHB="`echo $LINE | cut -d : -f2 | cut -d - -f2`"
+			DAYB="`echo $LINE | cut -d : -f2 | cut -d - -f3`"
+
+			if [ -z $BUFFER ]
+			then
+				continue;
+			fi
+
+	    	   if [ $1 = "-b" ]
+		   then
+			if [ $YEARB -lt $YEAR ]
+			then
+				basename $BUFFER | cut -d : -f1
+	
+			elif [ $YEARB -eq $YEAR ]
+			then 
+				if [ $MONTHB -lt $MONTH ]
+				then
+					basename $BUFFER | cut -d : -f1
+		
+				elif [ $MONTHB -eq $MONTH ]
+				then
+					if [ $DAYB -lt $DAY ]
+					then
+						basename $BUFFER | cut -d : -f1
+				
+					elif [ $DAYB -eq $DAY ]
+					then 
+						basename $BUFFER | cut -d : -f1
+					fi
+				fi			
+			fi
+			
+		   elif [ $1 = "-a" ]
+		   then
+			if [ $YEAR -lt $YEARB ]
+				then
+					 basename $BUFFER | cut -d : -f1
+				
+				elif [ $YEAR -eq $YEARB ]
+				then 
+					if [ $MONTH -lt $MONTHB ]
+					then
+						basename $BUFFER | cut -d : -f1		
+				
+					elif [ $MONTH -eq $MONTHB ]
+					then
+						if [ $DAY -lt $DAYB ]
+						then
+							basename $BUFFER | cut -d : -f1
+
+						elif [ $DAY -eq $DAYB ]
+						then 
+							basename $BUFFER | cut -d : -f1
+						fi
+					fi	
+					
+				fi
+		fi	
+	
+		done < $WEDI_RC
+			
+}	
+
+##Funkce pro vypis editovanych polozek
+pushOnScreen()
+{
+	while read LINE
+	do
+		TMP="`echo $LINE | cut -d : -f1 | grep "$1/[^/]*$"`"
+			
+		if [ -z $TMP ]
+		then
+			continue;
+		fi
+
+		basename $TMP 
+
+ 	done < $WEDI_RC
+ 	
+}
+
+###################################KONEC FUNKCE listOfDate##################################################
+
+if [ -z $WEDI_RC ]
+then
+	echo "Format souboru neni specifikovan.";
+	exit 1;
+fi
+
+if [ -z $VISUAL ]
+then 
+	echo "Neni nastavena promena VISUAL";
+	exit 1;
+fi
+
+realpath /etc > /dev/null
+if [ $? -ne 0 ]
+then
+	echo "Je potreba nainstalovat utilitu realpath";
+	exit 1;
+fi
+
+if [ $# -eq 0 ] ## pokud nejsou zadany parametry 
+then 
+	COUNTOFEDIT="`cat $WEDI_RC | grep "$actualDir/[^/]*$" | wc -l`" ## Poce editovanych souboru
+	
+	if [ $COUNTOFEDIT -gt 1 ] ##jiz bylo editovano vice souboru 
+	then
+		LASTEDIT="`cat $WEDI_RC | grep "$actualDir/[^/]*$" | tail -n 1`";
+		removeDelim $LASTEDIT;				
+	else
+		SINGLEEDIT="`cat $WEDI_RC | grep "$actualDir/[^/]*$"`";
+		removeDelim $SINGLEEDIT;		
+	fi
+
+elif [ $# -eq 1 ] ##pokud byl zadan jeden parametr
+then
+	if [ -d $1 ] ##byl zadan pouze adresar
+	then
+		toRealDirectory $1;
+		COUNTOFEDIT="`cat $WEDI_RC | grep "$realDir/[^/]*$" | wc -l`" ## Poce editovanych souboru
+		if [ $COUNTOFEDIT -gt 1 ] ##jiz bylo editovano vice souboru 
+		then
+			LASTEDIT="`cat $WEDI_RC | grep "$realDir/[^/]*$" | tail -n 1`";
+			removeDelim $LASTEDIT;				
+		else
+			SINGLEEDIT="`cat $WEDI_RC | grep "$realDir/[^/]*$"`";
+			removeDelim $SINGLEEDIT;		
+		fi
+	
+	elif [ $1 = "-m" ] ##soubor, ktery byl editovan nejcasteji
+	then 
+		OFTEN="`cat $WEDI_RC | cut -d: -f1 | grep "$actualDir/[^/]*$" | grep $actualDir | sort -fd | uniq -c | sort -g | cut -d / -f 2-150 | tail -n 1`"
+		OFTEN="/$OFTEN"
+		removeDelim $OFTEN
+ 	
+	elif [ -e $1 ] ##byl zadan soubor, ktery se ma editovat
+	then 
+		editFile $1;	
+	
+	elif [ $1 = "-l" ] ##Vypise seznam souboru, ktere byly v aktualnim adresari editovany
+	then
+		pushOnScreen $actualDir | sort -u	
+	else
+		echo "chybne argumenty"
+		exit 1
+	fi
+
+elif [ $# -ge 2 ]  ##pokud bylo zadano 2 a vice parametru
+then 	
+	if [ \( $1 = "-m" \) -a \( -d $2 \) ] #soubor, ktery byl editovan nejcasteji  
+	then
+		toRealDirectory $2;
+		OFTEN="`cat $WEDI_RC | cut -d: -f1 | grep "$realDir/[^/]*$" | grep $realDir | sort -fd | uniq -c | sort -g | cut -d / -f 2-150 | tail -n 1`"
+
+		OFTEN="/$OFTEN"
+		removeDelim $OFTEN
+	
+	elif [ \( $1 = "-l" \) -a \( -d $2 \) ] ##Vypise seznam souboru, ktere byly editovany v danem adresari
+	then
+		toRealDirectory $2;
+		pushOnScreen $realDir | sort -u 
+	
+	elif echo $2 | egrep -q '^[0-9]{4}-0[0-9]|1[0-2]-[0-2][0-9]|3[0-1]$' #pokud se jedna o datum
+	then
+		YEAR="`echo $2 | cut -d - -f1`"
+		MONTH="`echo $2 | cut -d - -f2`"
+		DAY="`echo $2 | cut -d - -f3`"
+		 
+		if [ $1 = "-b" ] 
+		then
+			if [ $# -eq 2 ]
+			then
+				listOfDate $1 $2 $actualDir | sort -u
+			
+			elif [ \( $# -eq 3 \) -a \( -d $3 \) ] # before datum + adresar
+			then
+				toRealDirectory $3
+				listOfDate $1 $2 $realDir | sort -u
+			else
+				echo "chybne argumenty";
+				exit 1; 
+			fi
+			
+		elif [ $1 = "-a" ]
+		then
+			if [ $# -eq 2 ]
+			then
+				listOfDate $1 $2 $actualDir | sort -u
+
+			elif [ \( $# -eq 3 \) -a \( -d $3 \) ] #after datum +adresar
+			then
+				toRealDirectory $3
+				listOfDate $1 $2 $realDir | sort -u
+			else
+				echo "chybne argumenty";
+				exit 1; 
+			fi
+					
+		else
+			echo "chybne argumenty";
+			exit 1;
+		fi
+	  else
+		echo "chybne argumenty";
+		exit 1;
+	fi
+else 
+	echo "chybne argumenty";
+	exit 1;	
+fi
